@@ -1,12 +1,6 @@
-from concurrent.futures import ProcessPoolExecutor
-import mmap
 import os
-import sys
-import time
-from typing import BinaryIO
 import regex
-from multiprocessing import get_context
-from multiprocessing.shared_memory import SharedMemory
+from pympler import asizeof
 
 
 def find_chunk_boundaries(
@@ -77,54 +71,39 @@ def pretokenizer_iter(text: bytes):
         yield s.group(0)
 
 
-SPECIAL_TOKENS = None
-PATH = None
-
-def init_workers(special_tokens: list[str], path: str):
-    global SPECIAL_TOKENS, PATH
-    SPECIAL_TOKENS = special_tokens
-    PATH = path
-
-
-def run_worker_pretokenize(start: int, end: int):
-    """每个进程的工作函数"""
-    with open(PATH, "rb") as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-        chunk = memoryview(mm)[start:end].tobytes()
-        if SPECIAL_TOKENS is not None and len(SPECIAL_TOKENS) > 0:
-            chunk = delete_special_tokens(chunk, SPECIAL_TOKENS)
-        return list(pretokenizer_iter(chunk))
-
-
-def pretokenize_iter(
+def pretokenize(
     path: str,
     special_tokens: list[str],
     split_special_token: bytes,
     num_processes: int,
 ):
-    """预分词，将 file 转化为 pretoken 的序列"""
-    # AI 给出的建议，每个进程分 3 个 chunk
-    desired_num_chunks = num_processes * 3
-    chunk_boundaries = find_chunk_boundaries(
-        path, desired_num_chunks, split_special_token
-    )
+    """预分词，将 file 转化为 pretoken 的序列, 返回迭代器以节省内存"""
+    chunk_boundaries = find_chunk_boundaries(path, num_processes, split_special_token)
     # 分配任务参数
     starts, ends = [], []
     for i in range(len(chunk_boundaries) - 1):
         starts.append(chunk_boundaries[i])
         ends.append(chunk_boundaries[i + 1])
-    # 使用进程池分配执行任务, 初始化全局变量
-    with ProcessPoolExecutor(
-        max_workers=num_processes, initializer=init_workers, initargs=(special_tokens, path)
-    ) as ex:
-        for ptoks in ex.map(run_worker_pretokenize, starts, ends):
-            for t in ptoks:
-                yield t
+    res = []
+    file = open(path, "rb")
+    text = file.read()
+    file.close()
+
+    count = 0
+    for s, e in zip(starts, ends):
+        chunk = text[s:e]
+        if special_tokens and len(special_tokens) > 0:
+            chunk = delete_special_tokens(chunk, special_tokens)
+        t = [m for m in pretokenizer_iter(chunk)]
+        res.extend(t)
+        cur = len(t)
+        count += cur
+        print(f"collect {cur} tokens, total {count}")
+        # print(f"sizeof t: {asizeof.asizeof(t)}, sizeof res: {asizeof.asizeof(res)}")
+    return res
 
 
 if __name__ == "__main__":
     path = "data/TinyStoriesV2-GPT4-train.txt"
-    pretokens = pretokenize_iter(path, [], b"<|endoftext|>", 1)
-    cnt = 0
-    for i in pretokens:
-        cnt += 1
-    print(cnt)
+    pretokens = pretokenize(path, [], b"<|endoftext|>", 16)
+    print(len(pretokens))
