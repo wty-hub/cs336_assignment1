@@ -1,6 +1,8 @@
 import os
 import regex
-from pympler import asizeof
+import time
+from tqdm import tqdm
+import pickle
 
 
 def find_chunk_boundaries(
@@ -30,7 +32,9 @@ def find_chunk_boundaries(
 
     mini_chunk_size = 4096  # Read ahead by 4k bytes at a time
 
-    for bi in range(1, len(chunk_boundaries) - 1):
+    for bi in tqdm(
+        range(1, len(chunk_boundaries) - 1), desc="Finding Chunk Boundaries"
+    ):
         initial_position = chunk_boundaries[bi]
         file.seek(initial_position)  # Start at boundary guess
         while True:
@@ -65,45 +69,55 @@ PAT = rb"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\
 CPD_PAT = regex.compile(PAT)
 
 
-def pretokenizer_iter(text: bytes):
-    """预分词使用的迭代器"""
+def pretokenizer(text: bytes):
+    """进行预分词的迭代器"""
     for s in CPD_PAT.finditer(text):
         yield s.group(0)
 
 
-def pretokenize(
+def pretokenize_iter(
     path: str,
     special_tokens: list[str],
     split_special_token: bytes,
-    num_processes: int,
+    num_chunks: int = 64,
 ):
     """预分词，将 file 转化为 pretoken 的序列, 返回迭代器以节省内存"""
-    chunk_boundaries = find_chunk_boundaries(path, num_processes, split_special_token)
+    chunk_boundaries = find_chunk_boundaries(path, num_chunks, split_special_token)
+    print(f"chunk_boundaries: {chunk_boundaries}")
     # 分配任务参数
     starts, ends = [], []
     for i in range(len(chunk_boundaries) - 1):
         starts.append(chunk_boundaries[i])
         ends.append(chunk_boundaries[i + 1])
-    res = []
     file = open(path, "rb")
-    text = file.read()
-    file.close()
 
-    count = 0
-    for s, e in zip(starts, ends):
-        chunk = text[s:e]
-        if special_tokens and len(special_tokens) > 0:
-            chunk = delete_special_tokens(chunk, special_tokens)
-        t = [m for m in pretokenizer_iter(chunk)]
-        res.extend(t)
-        cur = len(t)
-        count += cur
-        print(f"collect {cur} tokens, total {count}")
-        # print(f"sizeof t: {asizeof.asizeof(t)}, sizeof res: {asizeof.asizeof(res)}")
-    return res
+    with tqdm(
+        zip(starts, ends),
+        desc="Pretokenizing Chunks",
+        total=len(starts),
+    ) as pbar:
+        for s, e in pbar:
+            file.seek(s)
+            chunk = file.read(e - s)
+            if special_tokens and len(special_tokens) > 0:
+                chunk = delete_special_tokens(chunk, special_tokens)
+            for m in pretokenizer(chunk):
+                yield m
+    file.close()
 
 
 if __name__ == "__main__":
     path = "data/TinyStoriesV2-GPT4-train.txt"
-    pretokens = pretokenize(path, [], b"<|endoftext|>", 16)
-    print(len(pretokens))
+    pretokens = pretokenize_iter(path, [], b"<|endoftext|>", 16)
+    res = []
+    i = 0
+    for p in pretokens:
+        i += 1
+        res.append(p)
+
+    output_path = "tmp/TinyStoriesV2-GPT4-train-pretokens.pkl"
+    with open(output_path, "wb") as f:
+        pickle.dump(res, f)
+    print(f"Saved pre-tokens to {output_path}")
+
+    print(f"total {i} pre-tokens")
