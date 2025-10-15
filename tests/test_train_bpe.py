@@ -26,12 +26,6 @@ def test_train_bpe_speed():
 
 def test_train_bpe():
     input_path = FIXTURES_PATH / "corpus.en"
-    vocab, merges = run_train_bpe(
-        input_path=input_path,
-        vocab_size=500,
-        special_tokens=["<|endoftext|>"],
-    )
-
     # Path to the reference tokenizer vocab and merges
     reference_vocab_path = FIXTURES_PATH / "train-bpe-reference-vocab.json"
     reference_merges_path = FIXTURES_PATH / "train-bpe-reference-merges.txt"
@@ -47,6 +41,12 @@ def test_train_bpe():
             )
             for merge_token_1, merge_token_2 in gpt2_reference_merges
         ]
+    vocab, merges = run_train_bpe(
+        input_path=input_path,
+        vocab_size=500,
+        special_tokens=["<|endoftext|>"],
+    )
+
     assert merges == reference_merges
 
     # Compare the vocab to the expected output vocab

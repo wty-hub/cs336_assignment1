@@ -1,15 +1,20 @@
 import pickle
 from typing import BinaryIO
 
-from cs336_basics.single_pretokenization import pretokenize_iter
+from cs336_basics.bigram_freq import get_bigram_freq
+from cs336_basics.merge import get_highest_bigram, slow_merge_once
+from cs336_basics.single_pretokenization import single_pretokenize_iter
 from typing import Iterator
+from tqdm import tqdm
+
+from tests.common import gpt2_bytes_to_unicode
 
 
 def get_prepair_freq(pretokenizer_iter: Iterator[bytes]) -> dict[tuple[bytes], int]:
     """获取预词元频率"""
     res = {}
     for p in pretokenizer_iter:
-        t = tuple(bytes(b) for b in p)
+        t = tuple(bytes([b]) for b in p)
         res[t] = res.get(t, 0) + 1
     return res
 
@@ -18,31 +23,52 @@ def train_bpe(
     input_path: str,
     vocab_size: int,
     special_tokens: list[str],
-    split_special_token: bytes,
+    split_special_token: bytes = b"<|endoftext|>",
 ):
-    file: BinaryIO = open(input_path, mode="rb")
-
     # 第一步：词汇表初始化
     ## 使用 byte-level BPE tokenizer, 所以一开始的 vocab size 是 256
-    cur_vocab_size = 256
     ## 一开始的 vocab 是所有单字节bytes的集合
-    cur_vocab = {bytes([b]) for b in range(256)}
+    cur_vocab_set = {bytes([b]) for b in range(256)}
+    cur_vocab_set.update(t for t in special_tokens)
 
-    # 第二步：预分词 + 统计字符对频率
-    pre_iter = pretokenize_iter(input_path, special_tokens, split_special_token)
-    freqs = get_prepair_freq(pre_iter)
+    # 第二步：预分词, 统计单词频率和双词组频率
+    print(f"预分词中")
+    pre_iter = single_pretokenize_iter(input_path, special_tokens, split_special_token)
+    vocab_freq = get_prepair_freq(pre_iter)
+    bigram_freq = get_bigram_freq(vocab_freq)
+
+    # 第三步：训练，不断增大当前词汇量
+    num_merges = vocab_size - len(cur_vocab_set)
+    pbar = tqdm(total=num_merges, desc="BPE 训练中")
+    merges = []
+    while len(cur_vocab_set) < vocab_size:
+        if len(merges) == 64:
+            pass
+        ## 获取当前频率最高的双词组
+        highest_bigram = get_highest_bigram(bigram_freq)
+        merges.append(highest_bigram)
+        ## 更新单词频率
+        vocab_freq = slow_merge_once(vocab_freq, highest_bigram)
+        ## 更新词汇表
+        new_token = b"".join(highest_bigram)
+        cur_vocab_set.add(new_token)
+        ## 更新双词组频率
+        bigram_freq = get_bigram_freq(vocab_freq)
+        bigram_count = len(bigram_freq.keys())
+        pbar.update(1)
+        if bigram_count <= 1:
+            ## 边界情况：没有双词组可供合并
+            print("无法继续合并，退出")
+    pbar.close()
+
+    # 第四步：根据要求，返回词汇表和合并记录
+    vocab = {index: value for index, value in enumerate(cur_vocab_set)}
+    return vocab, merges
 
 
 if __name__ == "__main__":
-    path = "data/TinyStoriesV2-GPT4-train.txt"
-    load_path = "tmp/TinyStoriesV2-GPT4-train-pretokens.pkl"
-    print(f"loading pickle")
-    with open(load_path, "rb") as f:
-        pretokens: list[bytes] = pickle.load(f)
-    print(f"counting frequency")
-    freq = get_prepair_freq(iter(pretokens))
-    save_path = "tmp/TinyStoriesV2-GPT4-train-freqs.pkl"
-    with open(save_path, "wb") as f:
-        pickle.dump(freq, f)
-    # print(freq)
-    # print(f'get {len(freq.keys())} tokens and {len(set(freq.values()))} kind of values')
+    train_bpe(
+        input_path="data/TinyStoriesV2-GPT4-valid.txt",
+        vocab_size=500,
+        special_tokens=["<|endoftext|>"],
+    )

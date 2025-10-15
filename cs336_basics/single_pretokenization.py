@@ -75,40 +75,47 @@ def pretokenizer(text: bytes):
         yield s.group(0)
 
 
-def pretokenize_iter(
+def single_pretokenize_iter(
     path: str,
     special_tokens: list[str],
     split_special_token: bytes,
-    num_chunks: int = 64,
 ):
     """预分词，将 file 转化为 pretoken 的序列, 返回迭代器以节省内存"""
-    chunk_boundaries = find_chunk_boundaries(path, num_chunks, split_special_token)
-    print(f"chunk_boundaries: {chunk_boundaries}")
-    # 分配任务参数
-    starts, ends = [], []
-    for i in range(len(chunk_boundaries) - 1):
-        starts.append(chunk_boundaries[i])
-        ends.append(chunk_boundaries[i + 1])
-    file = open(path, "rb")
+    # if num_chunks > 1:
+    #     chunk_boundaries = find_chunk_boundaries(path, num_chunks, split_special_token)
+    #     starts, ends = [], []
+    #     for i in range(len(chunk_boundaries) - 1):
+    #         starts.append(chunk_boundaries[i])
+    #         ends.append(chunk_boundaries[i + 1])
+    #     file = open(path, "rb")
 
-    with tqdm(
-        zip(starts, ends),
-        desc="Pretokenizing Chunks",
-        total=len(starts),
-    ) as pbar:
-        for s, e in pbar:
-            file.seek(s)
-            chunk = file.read(e - s)
-            if special_tokens and len(special_tokens) > 0:
-                chunk = delete_special_tokens(chunk, special_tokens)
-            for m in pretokenizer(chunk):
-                yield m
+    #     with tqdm(
+    #         zip(starts, ends),
+    #         desc="Pretokenizing Chunks",
+    #         total=len(starts),
+    #     ) as pbar:
+    #         for s, e in pbar:
+    #             file.seek(s)
+    #             chunk = file.read(e - s)
+    #             if special_tokens and len(special_tokens) > 0:
+    #                 chunk = delete_special_tokens(chunk, special_tokens)
+    #             for m in pretokenizer(chunk):
+    #                 yield m
+
+    #     file.close()
+    # else:
+    file = open(path, "rb")
+    chunk = file.read()
+    token_to_remove = b"|".join(regex.escape(s.encode("utf-8")) for s in special_tokens)
+    chunk = chunk.replace(token_to_remove, b"")
+    for m in pretokenizer(chunk):
+        yield m
     file.close()
 
 
 if __name__ == "__main__":
     path = "data/TinyStoriesV2-GPT4-train.txt"
-    pretokens = pretokenize_iter(path, [], b"<|endoftext|>", 16)
+    pretokens = single_pretokenize_iter(path, [], b"<|endoftext|>", 16)
     res = []
     i = 0
     for p in pretokens:
