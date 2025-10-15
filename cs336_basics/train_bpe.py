@@ -27,9 +27,10 @@ def train_bpe(
 ):
     # 第一步：词汇表初始化
     ## 使用 byte-level BPE tokenizer, 所以一开始的 vocab size 是 256
-    ## 一开始的 vocab 是所有单字节bytes的集合
-    cur_vocab_set = {bytes([b]) for b in range(256)}
-    cur_vocab_set.update(t for t in special_tokens)
+    ## 一开始的 vocab 是所有单字节bytes的集合加上所有特殊token
+    cur_vocab_set = set()
+    cur_vocab_set.update(t.encode() for t in special_tokens)
+    cur_vocab_set.update(bytes([b]) for b in range(256))
 
     # 第二步：预分词, 统计单词频率和双词组频率
     print(f"预分词中")
@@ -42,16 +43,14 @@ def train_bpe(
     pbar = tqdm(total=num_merges, desc="BPE 训练中")
     merges = []
     while len(cur_vocab_set) < vocab_size:
-        if len(merges) == 64:
-            pass
         ## 获取当前频率最高的双词组
         highest_bigram = get_highest_bigram(bigram_freq)
-        merges.append(highest_bigram)
-        ## 更新单词频率
-        vocab_freq = slow_merge_once(vocab_freq, highest_bigram)
         ## 更新词汇表
         new_token = b"".join(highest_bigram)
         cur_vocab_set.add(new_token)
+        merges.append(highest_bigram)
+        ## 更新单词频率
+        vocab_freq = slow_merge_once(vocab_freq, highest_bigram)
         ## 更新双词组频率
         bigram_freq = get_bigram_freq(vocab_freq)
         bigram_count = len(bigram_freq.keys())
