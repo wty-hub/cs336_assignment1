@@ -83,9 +83,10 @@ def single_pretokenize_iter(
     """预分词，将 file 转化为 pretoken 的序列, 返回迭代器以节省内存"""
     file = open(path, "rb")
     chunk = file.read()
-    token_to_remove = b"|".join(regex.escape(s.encode()) for s in special_tokens)
-    # 分段，防止跨段拼接
-    chunks = regex.split(token_to_remove, chunk)
+    chunks = regex.split(regex.escape(split_special_token), chunk)
+    pattern_to_remove = b"|".join(regex.escape(s.encode()) for s in special_tokens)
+    for i in range(len(chunks)):
+        chunks[i] = regex.sub(pattern_to_remove, b"", chunks[i])
     for chunk in chunks:
         for m in pretokenizer(chunk):
             yield m

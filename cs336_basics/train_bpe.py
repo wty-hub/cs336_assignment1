@@ -1,7 +1,7 @@
 import pickle
 from typing import BinaryIO
 
-from cs336_basics.bigram_freq import get_bigram_freq
+from cs336_basics.bigram import get_bigram_freq
 from cs336_basics.merge import get_highest_bigram, slow_merge_once
 from cs336_basics.single_pretokenization import single_pretokenize_iter
 from typing import Iterator
