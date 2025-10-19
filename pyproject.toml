@@ -22,6 +22,7 @@ dependencies = [
     "pympler>=1.1",
     "ipython>=9.6.0",
     "debugpy>=1.8.17",
+    "ordered-set>=4.1.0",
 ]
 
 [build-system]

@@ -2,7 +2,7 @@ import pickle
 from typing import BinaryIO
 
 from cs336_basics.bigram import get_bigram_freq
-from cs336_basics.merge import get_highest_bigram, slow_merge_once
+from cs336_basics.merge import FastMerger, get_highest_bigram, slow_merge_once
 from cs336_basics.single_pretokenization import single_pretokenize_iter
 from typing import Iterator
 from tqdm import tqdm
@@ -65,9 +65,28 @@ def train_bpe(
     return vocab, merges
 
 
+def optimized_train_bpe(
+    input_path: str,
+    vocab_size: int,
+    special_tokens: list[str],
+    split_special_token: bytes = b"<|endoftext|>",
+):
+    pre_iter = single_pretokenize_iter(input_path, special_tokens, split_special_token)
+
+    merger = FastMerger(pre_iter, special_tokens)
+    num_merges = vocab_size - len(merger)
+    # pbar = tqdm(total=num_merges, desc="BPE 训练中")
+    while len(merger) < vocab_size:
+        merger.merge_once()
+        # pbar.update(1)
+    # pbar.close()
+
+    return merger.get_vocab(), merger.merges
+
+
 if __name__ == "__main__":
-    train_bpe(
-        input_path="data/TinyStoriesV2-GPT4-valid.txt",
+    optimized_train_bpe(
+        input_path="tests/fixtures/corpus.en",
         vocab_size=500,
         special_tokens=["<|endoftext|>"],
     )

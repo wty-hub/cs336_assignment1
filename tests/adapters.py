@@ -9,7 +9,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
-from cs336_basics.train_bpe import train_bpe
+from cs336_basics.train_bpe import optimized_train_bpe, train_bpe
 
 
 def run_linear(
@@ -592,4 +592,4 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     # raise NotImplementedError
-    return train_bpe(input_path, vocab_size, special_tokens)
+    return optimized_train_bpe(input_path, vocab_size, special_tokens)
