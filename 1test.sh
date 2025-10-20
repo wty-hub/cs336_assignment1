@@ -1,1 +1,3 @@
 uv run pytest tests/test_train_bpe.py
+
+uv run pytest tests/test_tokenizer.py

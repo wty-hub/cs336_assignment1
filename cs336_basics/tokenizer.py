@@ -2,8 +2,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 import heapq
 import json
-from typing import Optional
+from typing import Iterable, Optional
 
+from ordered_set import OrderedSet
 import regex
 
 from tests.common import gpt2_bytes_to_unicode
@@ -24,6 +25,11 @@ class PreTokenizer:
 
     def iter(self):
         for s in PreTokenizer.CPD_PAT.finditer(self.text):
+            yield s.group(0)
+
+    @classmethod
+    def iter_text(cls, text: str):
+        for s in cls.CPD_PAT.finditer(text):
             yield s.group(0)
 
 
@@ -69,14 +75,16 @@ class TokenNode:
     def die(self):
         self.alive = False
 
-    def merge_with_next(self):
-        self.die()
+    def get_node_pairs(self):
+        """获取当前结点属于的所有结点对"""
+        res: list[NodePair] = []
+        prev = self.get_prev()
+        if prev is not None:
+            res.append((prev, self))
         nxt = self.get_next()
-        assert nxt is not None
-        nxt.die()
-        new_node = TokenNode(self.token + nxt.token)
-        self.insert_next(new_node)
-        return new_node
+        if nxt is not None:
+            res.append((self, nxt))
+        return res
 
     @staticmethod
     def build_list(word: bytes):
@@ -91,61 +99,64 @@ class TokenNode:
         return head, tail
 
 
+TokenPair = tuple[bytes, bytes]
+NodePair = tuple[TokenNode, TokenNode]
+
+
+@dataclass(order=True)
 class HeapElement:
-    # 小根堆元素
-    def __init__(self, rank):
-        self.rank = rank
-        self.left_nodes: list[TokenNode] = []
-        self.right_nodes: list[TokenNode] = []
+    # 小根堆元素，只记录 token 和优先级 rank
+    rank: int
+    pair: TokenPair
 
-    def occur(self, left_node: TokenNode, right_node: TokenNode):
-        self.left_nodes.append(left_node)
-        self.right_nodes.append(right_node)
 
-    def __lt__(self, value):
-        return self.rank < value.rank
+def node_pair_valid(pair: NodePair):
+    return pair[0].alive and pair[1].alive
+
+
+def merge_node(pair: NodePair):
+    assert pair[0].get_next() is pair[1]
+    new_node = TokenNode(pair[0].token + pair[1].token)
+    pair[0].insert_next(new_node)
+    pair[0].die()
+    pair[1].die()
+    return new_node
+
+
+def get_token_pair(node_pair: NodePair) -> TokenPair:
+    return (node_pair[0].token, node_pair[1].token)
 
 
 class PretokenSplitter:
     """负责将 pretoken 分割为最优的 token，以便编码"""
 
-    def __init__(self, merges: list[tuple[bytes, bytes]]):
+    def __init__(self, merges: list[TokenPair]):
         # 没有 special_tokens，因为预分词的时候去掉了
         self.merges = merges
         # 越靠前的 pair 优先级越高
-        self.ranks: dict[tuple[bytes, bytes], int] = dict()
+        self.ranks: dict[TokenPair, int] = dict()
         for idx, tple in enumerate(merges):
             self.ranks[tple] = idx
+        # 每个双词组对应的 node
+        self.pair_to_nodes: defaultdict[TokenPair, set[NodePair]] = defaultdict(set)
         # 我发现很多单词都是重复的，可以使用缓存机制
         self.cache: dict[bytes, list[bytes]] = dict()
 
-    def heappop_once(self, heap: list[HeapElement]):
-        new_node_pairs: set[tuple[TokenNode, TokenNode]] = set()
-        top = heapq.heappop(heap)
-        for l_node, r_node in zip(top.left_nodes, top.right_nodes):
-            if not (l_node.alive and r_node.alive):
-                continue
-            new_node = l_node.merge_with_next(r_node)
-            if new_node.get_prev() is not None:
-                new_node_pairs.add((new_node.get_prev(), new_node))
-            if new_node.get_next() is not None:
-                new_node_pairs.add((new_node, new_node.get_next()))
-        self.deal_new_node_pairs(new_node_pairs, heap)
+    def _pair_can_be_merged(self, pair: TokenPair):
+        return pair in self.ranks
 
-    def deal_new_node_pairs(
-        self, new_node_pairs: set[tuple[TokenNode, TokenNode]], heap: list[HeapElement]
-    ):
-        new_token_pairs: defaultdict[
-            tuple[bytes, bytes], list[tuple[TokenNode, TokenNode]]
-        ] = defaultdict(list)
-        for l_node, r_node in new_node_pairs:
-            new_token_pair = (l_node.token, r_node.token)
-            if new_token_pair in self.ranks:
-                new_token_pairs[new_token_pair].append((l_node, r_node))
-        for token_pair, relative_nodes in new_token_pairs.item():
-            pass
+    def _bind_node_pair(self, node_pair: NodePair):
+        self.pair_to_nodes[get_token_pair(node_pair)].add(node_pair)
+
+    def _get_node_pairs(self, pair: TokenPair):
+        return self.pair_to_nodes[pair]
+
+    def _add_to_heap(self, new_pair: TokenPair, heap: list[HeapElement]):
+        if self._pair_can_be_merged(new_pair):
+            heapq.heappush(heap, HeapElement(self.ranks[new_pair], new_pair))
 
     def split(self, pretoken: bytes):
+
         if pretoken in self.cache:
             return self.cache[pretoken]
         # 边界情况：长度小于等于1
@@ -153,41 +164,80 @@ class PretokenSplitter:
             return [pretoken]
 
         # 初始化
-        pair_dict: defaultdict[
-            tuple[bytes, bytes], list[tuple[TokenNode, TokenNode]]
-        ] = defaultdict(list)
+        ## 清理状态
+        self.pair_to_nodes.clear()
+        ## 建立链表
         head, tail = TokenNode.build_list(pretoken)
-        node = head
-        while node is not None and node.get_next() is not None:
+        if head.get_next() is tail:
+            return []
+
+        ## 初始化每个双词组所对应的链表节点
+        node = head.get_next()
+        while node is not tail and node.get_next() is not tail:
             pair = (node.token, node.get_next().token)
-            pair_dict[pair].append(node, node.get_next())
+            self._bind_node_pair((node, node.get_next()))
+            node = node.get_next()
+
+        ## 初始化堆
         heap: list[HeapElement] = []
-        for pair, occurs in pair_dict.items():
-            rank = self.ranks[pair]
-            elem = HeapElement(rank)
-            for l_node, r_node in occurs:
-                elem.occur(l_node, r_node)
-            heap.append(elem)
+        for pair in self.pair_to_nodes:
+            if self._pair_can_be_merged(pair):
+                rank = self.ranks[pair]
+                elem = HeapElement(rank, pair)
+                heap.append(elem)
         heapq.heapify(heap)
 
+        # 合并过程
         while len(heap) > 0:
-            self.heappop_once(heap)
+            top = heapq.heappop(heap)
+            self._merge_token_pair(top.pair, heap)
+
+        res: list[bytes] = []
+        # head是哨兵头结点
+        node = head.get_next()
+        while node is not tail:
+            res.append(node.token)
+            node = node.get_next()
+
+        self.cache[pretoken] = res
+        return res
+
+    def _merge_token_pair(self, token_pair: TokenPair, heap: list[HeapElement]):
+        # 获取单词链表中所有对应的结点对
+        node_pairs = self.pair_to_nodes[token_pair]
+        new_token_pairs: set[TokenPair] = set()
+        for node_pair in node_pairs:
+            # 逐个合并结点对
+            if not node_pair_valid(node_pair):
+                continue
+            new_node = merge_node(node_pair)
+            # 查看合并后出现的新结点对
+            new_node_pairs = new_node.get_node_pairs()
+            for new_node_pair in new_node_pairs:
+                token_pair = get_token_pair(new_node_pair)
+                new_token_pairs.add(token_pair)
+                # 绑定新的token对与node对
+                self._bind_node_pair(new_node_pair)
+        for new_token_pair in new_token_pairs:
+            self._add_to_heap(new_token_pair, heap)
 
 
 class Tokenizer:
     def __init__(
         self,
         vocab: dict[int, bytes],
-        merges: list[tuple[bytes, bytes]],
+        merges: list[TokenPair],
         special_tokens: list[str] | None = None,
     ):
         self.vocab = vocab
+        self.reverse_vocab = dict((value, key) for key, value in self.vocab.items())
         self.merges = merges
         self.special_tokens = special_tokens
         self.remove_regex = None
         if self.special_tokens is not None:
             pattern = "|".join(regex.escape(s) for s in self.special_tokens)
             self.remove_regex = regex.compile(pattern)
+        self.splitter = PretokenSplitter(self.merges)
 
     @classmethod
     def from_files(
@@ -210,7 +260,7 @@ class Tokenizer:
         # merges 格式是每一行两个被merge的token，用空格隔开
         ## GPT-2 使用了特殊字符表示不可见字符，需要转换
         with open(merges_filepath, "r") as merges_file:
-            merges: list[tuple[bytes, bytes]]
+            merges: list[TokenPair]
             gpt2_byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
             merges_raw = [tuple(line.rstrip().split(" ")) for line in merges_file]
             merges = [
@@ -224,7 +274,30 @@ class Tokenizer:
         return cls(vocab, merges, special_tokens)
 
     def encode(self, text: str):
+        res: list[int] = []
         if self.remove_regex is not None:
             text = self.remove_regex.sub("", text)
         text: bytes = text.encode()
         pretokenizer = PreTokenizer(text)
+        for pretoken in pretokenizer.iter():
+            splits = self.splitter.split(pretoken)
+            for split in splits:
+                token_id = self.reverse_vocab[split]
+                res.append(token_id)
+        return res
+
+    def encode_iterable(self, iterable: Iterable[str]):
+        for s in iterable:
+            s = self.remove_regex.sub("", s)
+            text = s.encode()
+            for pretoken in PreTokenizer.iter_text(text):
+                splits = self.splitter.split(pretoken)
+                for split in splits:
+                    token_id = self.reverse_vocab[split]
+                    yield token_id
+
+    def decode(self, ids: list[int]):
+        tokens: list[bytes] = []
+        for id in ids:
+            tokens.append(self.vocab[id])
+        return b"".join(tokens).decode()
