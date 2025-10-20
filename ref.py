@@ -1,4 +1,4 @@
-from tests.test_tokenizer import test_roundtrip_unicode_string_with_special_tokens
+from tests.test_tokenizer import test_overlapping_special_tokens, test_roundtrip_unicode_string_with_special_tokens, test_unicode_string_with_special_tokens_matches_tiktoken
 
 
-test_roundtrip_unicode_string_with_special_tokens()
+test_overlapping_special_tokens()

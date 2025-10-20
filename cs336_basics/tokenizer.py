@@ -233,11 +233,25 @@ class Tokenizer:
         self.reverse_vocab = dict((value, key) for key, value in self.vocab.items())
         self.merges = merges
         self.special_tokens = special_tokens
-        self.remove_regex = None
+        self.special_regex = None
+
         if self.special_tokens is not None:
-            pattern = "|".join(regex.escape(s) for s in self.special_tokens)
-            self.remove_regex = regex.compile(pattern)
+            # 某个测试要求我们尽力匹配最长的，所以要把长的放在前面
+            special_tokens.sort(key=len, reverse=True)
+            pattern = "(" + "|".join(regex.escape(s) for s in self.special_tokens) + ")"
+            self.special_regex = regex.compile(pattern)
         self.splitter = PretokenSplitter(self.merges)
+
+        # special_tokens 需要特殊处理，不能简单丢掉，得复原回去
+        ## 你能想到吗？这种编码方式也是规定的
+        special_id = max(vocab.keys())
+        self.special_tokens_vocab: dict[int, bytes] = dict()
+        self.special_tokens_reverse_vocab: dict[str, int] = dict()
+        if self.special_tokens is not None:
+            for s in special_tokens:
+                self.special_tokens_vocab[special_id] = s.encode()
+                self.special_tokens_reverse_vocab[s] = special_id
+                special_id += 1
 
     @classmethod
     def from_files(
@@ -275,29 +289,49 @@ class Tokenizer:
 
     def encode(self, text: str):
         res: list[int] = []
-        if self.remove_regex is not None:
-            text = self.remove_regex.sub("", text)
-        text: bytes = text.encode()
-        pretokenizer = PreTokenizer(text)
-        for pretoken in pretokenizer.iter():
-            splits = self.splitter.split(pretoken)
-            for split in splits:
-                token_id = self.reverse_vocab[split]
-                res.append(token_id)
+        chunks = (
+            self.special_regex.split(text) if self.special_regex is not None else [text]
+        )
+        for chunk in chunks:
+            if chunk == "":
+                continue
+            if chunk in self.special_tokens_reverse_vocab:
+                res.append(self.special_tokens_reverse_vocab[chunk])
+                continue
+            chunk = chunk.encode()
+            pretokenizer = PreTokenizer(chunk)
+            for pretoken in pretokenizer.iter():
+                splits = self.splitter.split(pretoken)
+                for split in splits:
+                    token_id = self.reverse_vocab[split]
+                    res.append(token_id)
         return res
 
     def encode_iterable(self, iterable: Iterable[str]):
         for s in iterable:
-            s = self.remove_regex.sub("", s)
-            text = s.encode()
-            for pretoken in PreTokenizer.iter_text(text):
-                splits = self.splitter.split(pretoken)
-                for split in splits:
-                    token_id = self.reverse_vocab[split]
-                    yield token_id
+            chunks = (
+                self.special_regex.split(s) if self.special_regex is not None else [s]
+            )
+            for chunk in chunks:
+                if chunk == "":
+                    continue
+                if chunk in self.special_tokens_reverse_vocab:
+                    yield self.special_tokens_reverse_vocab[chunk]
+                    continue
+                chunk = chunk.encode()
+                for pretoken in PreTokenizer.iter_text(chunk):
+                    splits = self.splitter.split(pretoken)
+                    for split in splits:
+                        token_id = self.reverse_vocab[split]
+                        yield token_id
 
     def decode(self, ids: list[int]):
         tokens: list[bytes] = []
         for id in ids:
-            tokens.append(self.vocab[id])
-        return b"".join(tokens).decode()
+            if id in self.vocab:
+                tokens.append(self.vocab[id])
+            elif id in self.special_tokens_vocab:
+                tokens.append(self.special_tokens_vocab[id])
+            else:
+                raise ValueError(f"invalid id: {id}")
+        return b"".join(tokens).decode(errors="replace")
