@@ -5,7 +5,7 @@ from typing import Iterable
 
 from ordered_set import OrderedSet
 
-from cs336_basics.single_pretokenization import single_pretokenize_iter
+from .single_pretokenization import single_pretokenize_iter
 
 
 def is_subtuple(sub: tuple, full: tuple):

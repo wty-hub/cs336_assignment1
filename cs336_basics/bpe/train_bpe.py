@@ -1,9 +1,9 @@
 import pickle
 from typing import BinaryIO
 
-from cs336_basics.bigram import get_bigram_freq
-from cs336_basics.merge import FastMerger, get_highest_bigram, slow_merge_once
-from cs336_basics.single_pretokenization import single_pretokenize_iter
+from .bigram import get_bigram_freq
+from .merge import FastMerger, get_highest_bigram, slow_merge_once
+from .single_pretokenization import single_pretokenize_iter
 from typing import Iterator
 from tqdm import tqdm
 
