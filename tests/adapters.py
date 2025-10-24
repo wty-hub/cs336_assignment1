@@ -13,6 +13,7 @@ from cs336_basics.bpe.tokenizer import Tokenizer
 from cs336_basics.bpe.train_bpe import optimized_train_bpe, train_bpe
 from cs336_basics.transformer.embedding import Embedding
 from cs336_basics.transformer.linear import Linear
+from cs336_basics.transformer.positionwise_feedforward import SwiGLUFFW
 from cs336_basics.transformer.rmsnorm import RMSNorm
 
 
@@ -96,7 +97,13 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    # raise NotImplementedError
+    swiglu = SwiGLUFFW(d_model, d_ff)
+    with torch.no_grad():
+        swiglu.W1.W.copy_(w1_weight)
+        swiglu.W2.W.copy_(w2_weight)
+        swiglu.W3.W.copy_(w3_weight)
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -313,7 +320,7 @@ def run_transformer_lm(
         num_heads (int): Number of heads to use in multi-headed attention. `d_model` must be
             evenly divisible by `num_heads`.
         d_ff (int): Dimensionality of the feed-forward inner layer (section 3.3).
-        rope_theta (float): The RoPE $\Theta$ parameter.
+        rope_theta (float): The RoPE $Theta$ parameter.
         weights (dict[str, Tensor]):
             State dict of our reference implementation. {num_layers} refers to an
             integer between `0` and `num_layers - 1` (the layer index).
