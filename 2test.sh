@@ -3,3 +3,6 @@ uv run pytest -k test_embedding
 uv run pytest -k test_swiglu
 uv run pytest -k test_rope
 uv run pytest -k test_softmax_matches_pytorch
+uv run pytest -k test_scaled_dot_product_attention
+uv run pytest -k test_4d_scaled_dot_product_attention
+uv run pytest -k test_multihead_self_attention

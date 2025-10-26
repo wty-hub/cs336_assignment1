@@ -11,11 +11,17 @@ from torch import Tensor
 
 from cs336_basics.bpe.tokenizer import Tokenizer
 from cs336_basics.bpe.train_bpe import optimized_train_bpe, train_bpe
+from cs336_basics.transformer.attention import (
+    MultiHeadSelfAttention,
+    scaled_dot_product_attention,
+)
 from cs336_basics.transformer.embedding import Embedding
 from cs336_basics.transformer.linear import Linear
 from cs336_basics.transformer.positionwise_feedforward import SwiGLUFFW
 from cs336_basics.transformer.rmsnorm import RMSNorm
-from cs336_basics.transformer.rotary_positional_embedding import RotaryPositionalEmbedding
+from cs336_basics.transformer.rotary_positional_embedding import (
+    RotaryPositionalEmbedding,
+)
 from cs336_basics.transformer.softmax import softmax
 
 
@@ -126,7 +132,8 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -157,10 +164,17 @@ def run_multihead_self_attention(
         in_features (Float[Tensor, "... sequence_length d_in"]): Tensor to run your implementation on.
 
     Returns:
-        Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
+        Float[Tensor, " ... sequence_lengthq q d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    mhsa = MultiHeadSelfAttention(d_model, num_heads)
+    with torch.no_grad():
+        mhsa.W_q.W.copy_(q_proj_weight)
+        mhsa.W_k.W.copy_(k_proj_weight)
+        mhsa.W_v.W.copy_(v_proj_weight)
+        mhsa.ln_out.W.copy_(o_proj_weight)
+    return mhsa(in_features)
 
 
 def run_multihead_self_attention_with_rope(
