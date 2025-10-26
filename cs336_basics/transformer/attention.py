@@ -5,6 +5,9 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from cs336_basics.transformer.linear import Linear
+from cs336_basics.transformer.rotary_positional_embedding import (
+    RotaryPositionalEmbedding,
+)
 from cs336_basics.transformer.softmax import softmax
 
 
@@ -49,7 +52,14 @@ class MultiHeadSelfAttention(nn.Module):
         self.W_v = Linear(d_model, d_model)
         self.ln_out = Linear(d_model, d_model)
 
-    def forward(self, X: torch.Tensor, mask: torch.Tensor | None = None):
+    def forward(
+        self,
+        X: torch.Tensor,
+        RoPE: RotaryPositionalEmbedding | None = None,
+        token_position: Int[Tensor, " ... sequence_length"] | None = None,
+        mask: torch.Tensor | None = None,
+    ):
+        """RoPE如果不为0，则说明使用旋转位置编码应用于Q，K"""
         batch_size = X.shape[0]
         seq_length = X.shape[1]
         Q = self.W_q(X).view(batch_size, seq_length, self.num_heads, self.d_k)
@@ -59,6 +69,29 @@ class MultiHeadSelfAttention(nn.Module):
         Q = Q.permute(0, 2, 1, 3)  # (batch_size, num_heads, seq_length, head_dim)
         K = K.permute(0, 2, 1, 3)  # (batch_size, num_heads, seq_length, head_dim)
         V = V.permute(0, 2, 1, 3)  # (batch_size, num_heads, seq_length, head_dim)
+
+        if RoPE is not None:
+            # 进行 RoPE 编码
+            ## 需要使得 token_position 形状与 Q，K 一致
+            if token_position.dim() == 2:
+                token_position = token_position.unsqueeze(1).expand(
+                    batch_size, self.num_heads, seq_length
+                )
+            elif token_position.dim() == 3 and token_position.shape[1] == 1:
+                token_position = token_position.expand(
+                    batch_size, self.num_heads, seq_length
+                )
+
+            pos = token_position.reshape(batch_size * self.num_heads, seq_length)
+            Q = Q.reshape(batch_size * self.num_heads, seq_length, self.d_k)
+            K = K.reshape(batch_size * self.num_heads, seq_length, self.d_k)
+
+            Q = RoPE(Q, pos)
+            K = RoPE(K, pos)
+
+            Q = Q.view(batch_size, self.num_heads, seq_length, self.d_k)
+            K = K.view(batch_size, self.num_heads, seq_length, self.d_k)
+
         device = X.device
 
         # 构建因果遮罩
