@@ -22,12 +22,12 @@ class SwiGLUFFW(nn.Module):
         else:
             self.d_ff = d_ff
 
-        self.W1 = Linear(d_model, d_ff)
-        self.W2 = Linear(d_ff, d_model)
-        self.W3 = Linear(d_model, d_ff)
+        self.w1 = Linear(d_model, d_ff)
+        self.w2 = Linear(d_ff, d_model)
+        self.w3 = Linear(d_model, d_ff)
 
     def forward(self, x: torch.Tensor):
-        x_1 = SiLU(self.W1(x))
-        x_2 = self.W3(x)
+        x_1 = SiLU(self.w1(x))
+        x_2 = self.w3(x)
         # 这里是逐元素相乘
-        return self.W2(x_1 * x_2)
+        return self.w2(x_1 * x_2)

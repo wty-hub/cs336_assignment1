@@ -47,10 +47,10 @@ class MultiHeadSelfAttention(nn.Module):
         self.d_model = d_model
         self.num_heads = num_heads
         self.d_k = d_model // num_heads
-        self.W_q = Linear(d_model, d_model)
-        self.W_k = Linear(d_model, d_model)
-        self.W_v = Linear(d_model, d_model)
-        self.ln_out = Linear(d_model, d_model)
+        self.q_proj = Linear(d_model, d_model)
+        self.k_proj = Linear(d_model, d_model)
+        self.v_proj = Linear(d_model, d_model)
+        self.output_proj = Linear(d_model, d_model)
 
     def forward(
         self,
@@ -62,9 +62,9 @@ class MultiHeadSelfAttention(nn.Module):
         """RoPE如果不为0，则说明使用旋转位置编码应用于Q，K"""
         batch_size = X.shape[0]
         seq_length = X.shape[1]
-        Q = self.W_q(X).view(batch_size, seq_length, self.num_heads, self.d_k)
-        K = self.W_k(X).view(batch_size, seq_length, self.num_heads, self.d_k)
-        V = self.W_v(X).view(batch_size, seq_length, self.num_heads, self.d_k)
+        Q = self.q_proj(X).view(batch_size, seq_length, self.num_heads, self.d_k)
+        K = self.k_proj(X).view(batch_size, seq_length, self.num_heads, self.d_k)
+        V = self.v_proj(X).view(batch_size, seq_length, self.num_heads, self.d_k)
 
         Q = Q.permute(0, 2, 1, 3)  # (batch_size, num_heads, seq_length, head_dim)
         K = K.permute(0, 2, 1, 3)  # (batch_size, num_heads, seq_length, head_dim)
@@ -118,5 +118,5 @@ class MultiHeadSelfAttention(nn.Module):
             .view(batch_size, seq_length, self.num_heads * self.d_k)
         )
 
-        res = self.ln_out(res)
+        res = self.output_proj(res)
         return res

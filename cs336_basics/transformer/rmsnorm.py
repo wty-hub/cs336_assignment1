@@ -20,7 +20,7 @@ class RMSNorm(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.eps = eps
-        self.g = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
+        self.weight = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
 
     def forward(self, x: torch.Tensor):
         in_dtype = x.dtype
@@ -29,5 +29,5 @@ class RMSNorm(nn.Module):
         rms = torch.sqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
         # 保持维度，所以现在rms.shape == (batch_size, seq_length, 1)
         # 利用广播机制完成运算
-        rms_norm = (x / rms) * self.g
+        rms_norm = (x / rms) * self.weight
         return rms_norm.to(in_dtype)

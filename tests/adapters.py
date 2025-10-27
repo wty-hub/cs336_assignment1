@@ -46,7 +46,7 @@ def run_linear(
 
     linear = Linear(d_in, d_out, device=in_features.device, dtype=in_features.dtype)
     with torch.no_grad():
-        linear.W.copy_(weights.to(device=in_features.device, dtype=in_features.dtype))
+        linear.weight.copy_(weights.to(device=in_features.device, dtype=in_features.dtype))
     return linear(in_features)
 
 
@@ -108,9 +108,9 @@ def run_swiglu(
     # raise NotImplementedError
     swiglu = SwiGLUFFW(d_model, d_ff)
     with torch.no_grad():
-        swiglu.W1.W.copy_(w1_weight)
-        swiglu.W2.W.copy_(w2_weight)
-        swiglu.W3.W.copy_(w3_weight)
+        swiglu.w1.weight.copy_(w1_weight)
+        swiglu.w2.weight.copy_(w2_weight)
+        swiglu.w3.weight.copy_(w3_weight)
     return swiglu(in_features)
 
 
@@ -170,10 +170,10 @@ def run_multihead_self_attention(
     # raise NotImplementedError
     mhsa = MultiHeadSelfAttention(d_model, num_heads)
     with torch.no_grad():
-        mhsa.W_q.W.copy_(q_proj_weight)
-        mhsa.W_k.W.copy_(k_proj_weight)
-        mhsa.W_v.W.copy_(v_proj_weight)
-        mhsa.ln_out.W.copy_(o_proj_weight)
+        mhsa.q_proj.weight.copy_(q_proj_weight)
+        mhsa.k_proj.weight.copy_(k_proj_weight)
+        mhsa.v_proj.weight.copy_(v_proj_weight)
+        mhsa.output_proj.weight.copy_(o_proj_weight)
     return mhsa(in_features)
 
 
@@ -217,10 +217,10 @@ def run_multihead_self_attention_with_rope(
     # raise NotImplementedError
     mhsa = MultiHeadSelfAttention(d_model, num_heads)
     with torch.no_grad():
-        mhsa.W_q.W.copy_(q_proj_weight)
-        mhsa.W_k.W.copy_(k_proj_weight)
-        mhsa.W_v.W.copy_(v_proj_weight)
-        mhsa.ln_out.W.copy_(o_proj_weight)
+        mhsa.q_proj.weight.copy_(q_proj_weight)
+        mhsa.k_proj.weight.copy_(k_proj_weight)
+        mhsa.v_proj.weight.copy_(v_proj_weight)
+        mhsa.output_proj.weight.copy_(o_proj_weight)
     rope = RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len, in_features.device)
     return mhsa.forward(in_features, rope, token_positions)
 
@@ -427,7 +427,7 @@ def run_rmsnorm(
     # raise NotImplementedError
     rms_norm = RMSNorm(d_model, eps, in_features.device)
     with torch.no_grad():
-        rms_norm.g.copy_(weights)
+        rms_norm.weight.copy_(weights)
     return rms_norm(in_features)
 
 

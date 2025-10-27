@@ -21,15 +21,15 @@ class Linear(nn.Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.W = nn.Parameter(
+        self.weight = nn.Parameter(
             torch.empty(out_features, in_features, device=device, dtype=dtype)
         )
         # variance，方差
         var = 2.0 / (in_features + out_features)
         std = math.sqrt(var)
         # 截断初始化
-        nn.init.trunc_normal_(self.W, 0, std, a=-3.0 * std, b=3.0 * std)
+        nn.init.trunc_normal_(self.weight, 0, std, a=-3.0 * std, b=3.0 * std)
 
     def forward(self, x: torch.Tensor):
         # x.shape: ..., in_features
-        return x @ self.W.T
+        return x @ self.weight.T
