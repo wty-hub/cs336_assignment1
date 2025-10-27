@@ -84,7 +84,8 @@ class MultiHeadSelfAttention(nn.Module):
                     )
             else:
                 token_position = torch.arange(0, seq_length, 1)
-                
+                token_position = token_position.expand(batch_size, self.num_heads, -1)
+
             pos = token_position.reshape(batch_size * self.num_heads, seq_length)
             Q = Q.reshape(batch_size * self.num_heads, seq_length, self.d_k)
             K = K.reshape(batch_size * self.num_heads, seq_length, self.d_k)
