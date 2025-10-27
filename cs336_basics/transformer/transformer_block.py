@@ -40,5 +40,5 @@ class TransformerBlock(nn.Module):
             t = self.attn(t)
         x = x + t
         t = self.ln2(x)
-        t = self.ln2(x)
+        t = self.ffn(t)
         return x + t

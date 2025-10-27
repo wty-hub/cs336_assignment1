@@ -23,7 +23,8 @@ from cs336_basics.transformer.rotary_positional_embedding import (
     RotaryPositionalEmbedding,
 )
 from cs336_basics.transformer.softmax import softmax
-from cs336_basics.transformer.transformer import TransformerBlock
+from cs336_basics.transformer.transformer_block import TransformerBlock
+from cs336_basics.transformer.transformer_lm import TransformerLM
 
 
 def run_linear(
@@ -75,7 +76,7 @@ def run_embedding(
     # raise NotImplementedError
     embedding = Embedding(vocab_size, d_model, token_ids.device)
     with torch.no_grad():
-        embedding.W.copy_(weights.to(device=token_ids.device))
+        embedding.weight.copy_(weights.to(device=token_ids.device))
     return embedding(token_ids)
 
 
@@ -410,7 +411,12 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    lm = TransformerLM(
+        vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta
+    )
+    lm.load_state_dict(weights)
+    return lm(in_indices)
 
 
 def run_rmsnorm(
