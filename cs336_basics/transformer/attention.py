@@ -72,16 +72,19 @@ class MultiHeadSelfAttention(nn.Module):
 
         if RoPE is not None:
             # 进行 RoPE 编码
-            ## 需要使得 token_position 形状与 Q，K 一致
-            if token_position.dim() == 2:
-                token_position = token_position.unsqueeze(1).expand(
-                    batch_size, self.num_heads, seq_length
-                )
-            elif token_position.dim() == 3 and token_position.shape[1] == 1:
-                token_position = token_position.expand(
-                    batch_size, self.num_heads, seq_length
-                )
-
+            if token_position is not None:
+                ## 需要使得 token_position 形状与 Q，K 一致
+                if token_position.dim() == 2:
+                    token_position = token_position.unsqueeze(1).expand(
+                        batch_size, self.num_heads, seq_length
+                    )
+                elif token_position.dim() == 3 and token_position.shape[1] == 1:
+                    token_position = token_position.expand(
+                        batch_size, self.num_heads, seq_length
+                    )
+            else:
+                token_position = torch.arange(0, seq_length, 1)
+                
             pos = token_position.reshape(batch_size * self.num_heads, seq_length)
             Q = Q.reshape(batch_size * self.num_heads, seq_length, self.d_k)
             K = K.reshape(batch_size * self.num_heads, seq_length, self.d_k)

@@ -44,7 +44,7 @@ class RotaryPositionalEmbedding(nn.Module):
         self.register_buffer("sin_angles", sin_angles, persistent=False)
         self.register_buffer("cos_angles", cos_angles, persistent=False)
 
-    def forward(self, x: torch.Tensor, token_positions: torch.Tensor):
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None):
         """
         Process an input tensor of shape (..., seq_len, d_k) and return a tensor of the same shape.
         Note that you should tolerate x with an arbitrary number of batch dimensions. You should
@@ -53,6 +53,9 @@ class RotaryPositionalEmbedding(nn.Module):
         You should use the token positions to slice your (possibly precomputed) cos and sin tensors
         along the sequence dimension
         """
+        if token_positions is None:
+            token_positions = torch.arange(0, x.shape[-2], 1)
+            
         # 取出相应位置的cos和sin值
         position_sins = self.sin_angles[token_positions]  # (seq_len, d_k)
         position_coss = self.cos_angles[token_positions]  # (seq_len, d_k)

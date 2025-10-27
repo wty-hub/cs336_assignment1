@@ -4,6 +4,9 @@ import torch
 from cs336_basics.transformer.attention import MultiHeadSelfAttention
 from cs336_basics.transformer.positionwise_feedforward import SwiGLUFFW
 from cs336_basics.transformer.rmsnorm import RMSNorm
+from cs336_basics.transformer.rotary_positional_embedding import (
+    RotaryPositionalEmbedding,
+)
 
 
 class TransformerBlock(nn.Module):
@@ -24,11 +27,18 @@ class TransformerBlock(nn.Module):
         # 位置前馈网络
         self.ffn = SwiGLUFFW(d_model, d_ff)
 
-    def forward(self, x: torch.Tensor):
+    def forward(
+        self,
+        x: torch.Tensor,
+        rope: RotaryPositionalEmbedding | None = None,
+        token_positions: torch.Tensor | None = None,
+    ):
         t = self.ln1(x)
-        t = self.attn(t)
+        if rope is not None:
+            t = self.attn(t, rope, token_positions)
+        else:
+            t = self.attn(t)
         x = x + t
         t = self.ln2(x)
         t = self.ln2(x)
         return x + t
-        

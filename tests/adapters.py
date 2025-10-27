@@ -23,6 +23,7 @@ from cs336_basics.transformer.rotary_positional_embedding import (
     RotaryPositionalEmbedding,
 )
 from cs336_basics.transformer.softmax import softmax
+from cs336_basics.transformer.transformer import TransformerBlock
 
 
 def run_linear(
@@ -46,7 +47,9 @@ def run_linear(
 
     linear = Linear(d_in, d_out, device=in_features.device, dtype=in_features.dtype)
     with torch.no_grad():
-        linear.weight.copy_(weights.to(device=in_features.device, dtype=in_features.dtype))
+        linear.weight.copy_(
+            weights.to(device=in_features.device, dtype=in_features.dtype)
+        )
     return linear(in_features)
 
 
@@ -221,7 +224,9 @@ def run_multihead_self_attention_with_rope(
         mhsa.k_proj.weight.copy_(k_proj_weight)
         mhsa.v_proj.weight.copy_(v_proj_weight)
         mhsa.output_proj.weight.copy_(o_proj_weight)
-    rope = RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len, in_features.device)
+    rope = RotaryPositionalEmbedding(
+        theta, d_model // num_heads, max_seq_len, in_features.device
+    )
     return mhsa.forward(in_features, rope, token_positions)
 
 
@@ -319,7 +324,11 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    tb = TransformerBlock(d_model, num_heads, d_ff)
+    rope = RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
+    tb.load_state_dict(weights)
+    return tb(in_features, rope)
 
 
 def run_transformer_lm(
