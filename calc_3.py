@@ -14,5 +14,5 @@ p_total = (
 )
 print(f"first term: {16 * p_total}")
 
-last_factor = 4 * context_length * (num_layers * (16 * d_model + 2 * num_heads * context_length) + d_model + vocab_size)
+last_factor = 4 * context_length * (num_layers * (16 * d_model + 2 * context_length) + d_model + vocab_size)
 print(f'last factor: {last_factor}')
