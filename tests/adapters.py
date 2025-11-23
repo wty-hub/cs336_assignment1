@@ -15,8 +15,10 @@ from cs336_basics.transformer.attention import (
     MultiHeadSelfAttention,
     scaled_dot_product_attention,
 )
+from cs336_basics.transformer.cross_entropy import cross_entropy
 from cs336_basics.transformer.embedding import Embedding
 from cs336_basics.transformer.linear import Linear
+from cs336_basics.transformer.optimizer import AdamW
 from cs336_basics.transformer.positionwise_feedforward import SwiGLUFFW
 from cs336_basics.transformer.rmsnorm import RMSNorm
 from cs336_basics.transformer.rotary_positional_embedding import (
@@ -515,7 +517,8 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return cross_entropy(inputs, targets)
 
 
 def run_gradient_clipping(
@@ -536,7 +539,7 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    return AdamW
 
 
 def run_get_lr_cosine_schedule(
