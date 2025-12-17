@@ -23,6 +23,7 @@ dependencies = [
     "ipython>=9.6.0",
     "debugpy>=1.8.17",
     "ordered-set>=4.1.0",
+    "matplotlib>=3.10.8",
 ]
 
 [build-system]
