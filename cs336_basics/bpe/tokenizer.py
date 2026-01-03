@@ -261,16 +261,6 @@ class Tokenizer:
         special_tokens: list[str] | None = None,
     ):
         """根据文件创建新的 Tokenizer"""
-        # vocab file 是 json 格式
-        ## 原文件中 key 和 value 是颠倒的
-        with open(vocab_filepath, encoding="utf-8") as f:
-            vocab_reversed = json.load(f)
-            vocab = {
-                gpt2_vocab_index: bytes(
-                    [gpt2_byte_decoder[token] for token in gpt2_vocab_item]
-                )
-                for gpt2_vocab_item, gpt2_vocab_index in vocab_reversed.items()
-            }
         # merges 格式是每一行两个被merge的token，用空格隔开
         ## GPT-2 使用了特殊字符表示不可见字符，需要转换
         with open(merges_filepath, "r") as merges_file:
@@ -284,6 +274,17 @@ class Tokenizer:
                 )
                 for merge_token_1, merge_token_2 in merges_raw
             ]
+
+        # vocab file 是 json 格式
+        ## 原文件中 key 和 value 是颠倒的
+        with open(vocab_filepath, encoding="utf-8") as f:
+            vocab_reversed = json.load(f)
+            vocab = {
+                gpt2_vocab_index: bytes(
+                    [gpt2_byte_decoder[token] for token in gpt2_vocab_item]
+                )
+                for gpt2_vocab_item, gpt2_vocab_index in vocab_reversed.items()
+            }
 
         return cls(vocab, merges, special_tokens)
 

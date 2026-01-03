@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import numpy.typing as npt
 
@@ -20,11 +21,12 @@ def data_loading(
 
     for i, start_index in enumerate(start_indices):
         # 逐个转化为Tensor
-        data_batch[i] = torch.Tensor(
-            dataset[start_index : start_index + context_length]
+        # 使用 np.array() 强制复制数据，解决 memmap 只读警告
+        data_batch[i] = torch.from_numpy(
+            np.array(dataset[start_index : start_index + context_length])
         )
-        label_batch[i] = torch.Tensor(
-            dataset[start_index + 1 : start_index + context_length + 1]
+        label_batch[i] = torch.from_numpy(
+            np.array(dataset[start_index + 1 : start_index + context_length + 1])
         )
 
     return data_batch.to(device), label_batch.to(device)

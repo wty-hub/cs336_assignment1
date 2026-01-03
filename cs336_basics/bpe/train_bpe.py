@@ -72,7 +72,6 @@ def optimized_train_bpe(
     split_special_token: bytes = b"<|endoftext|>",
 ):
     pre_iter = single_pretokenize_iter(input_path, special_tokens, split_special_token)
-
     merger = FastMerger(pre_iter, special_tokens)
     # num_merges = vocab_size - len(merger)
     # pbar = tqdm(total=num_merges, desc="BPE 训练中")

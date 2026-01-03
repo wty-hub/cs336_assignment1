@@ -167,3 +167,6 @@ cython_debug/
 tmp/
 temp.py
 .vscode/
+
+bpe/
+checkpoints/
