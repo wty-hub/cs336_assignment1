@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import wandb
+import matplotlib.pyplot as plt
 
 from cs336_basics.transformer.checkpointing import load_checkpoint, save_checkpoint
 from cs336_basics.transformer.cross_entropy import cross_entropy
@@ -34,11 +35,11 @@ def get_args() -> argparse.Namespace:
 
     # Optimization hyperparameters
     parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight_decay", type=float, default=0.1)
     ## total tokens processed 327,680,000 (your batch size × total step count × context length should equal roughly this value).
     parser.add_argument("--max_steps", type=int, default=80_000)
-    parser.add_argument("--warmup_steps", type=int, default=2_000)
+    parser.add_argument("--warmup_steps", type=int, default=1_000)
     parser.add_argument("--min_lr", type=float, default=1e-5)
     parser.add_argument("--grad_clip", type=float, default=1.0)
 
@@ -208,6 +209,11 @@ def main() -> None:
     best_val = math.inf
     log_window_start = time.time()
 
+    # 记录 losses，手动画 loss 图
+    train_losses = []
+    val_losses = []
+    val_steps = []
+
     model.train()
     for step in range(start_step, args.max_steps):
         lr = learning_rate_schedule(
@@ -228,9 +234,10 @@ def main() -> None:
         )
         logits = model(xb.long())
         loss = cross_entropy(logits.view(-1, logits.size(-1)), yb.reshape(-1).long())
-
+        train_losses.append(loss.item())
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
+        
         if args.grad_clip is not None and args.grad_clip > 0:
             gradient_clipping(model.parameters(), args.grad_clip)
         optimizer.step()
@@ -256,6 +263,22 @@ def main() -> None:
         if (step + 1) % args.eval_interval == 0:
             val_loss = evaluate(model, val_data, args, device)
             best_val = min(best_val, val_loss)
+            
+            val_losses.append(val_loss)
+            val_steps.append(step + 1)
+
+            # 画loss图
+            plt.figure(figsize=(10, 6))
+            plt.plot(train_losses, label="Train Loss", alpha=0.3)
+            plt.plot(val_steps, val_losses, label="Val Loss", marker="o")
+            plt.xlabel("Steps")
+            plt.ylabel("Loss")
+            plt.title(f"Training Progress (Step {step+1})")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(out_dir / "loss_curve.png")
+            plt.close()
+
             print(
                 f"[Eval] step {step+1:07d} | val_loss {val_loss:.4f} | best {best_val:.4f}"
             )
