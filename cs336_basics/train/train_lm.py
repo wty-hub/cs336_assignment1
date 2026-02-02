@@ -12,7 +12,10 @@ import torch
 import wandb
 import matplotlib.pyplot as plt
 
-from cs336_basics.transformer.checkpointing import load_checkpoint, save_checkpoint
+from cs336_basics.transformer.checkpointing import (
+    load_checkpoint_with_hyperparams,
+    save_checkpoint,
+)
 from cs336_basics.transformer.cross_entropy import cross_entropy
 from cs336_basics.transformer.data_loading import data_loading
 from cs336_basics.transformer.gradient_clipping import gradient_clipping
@@ -75,6 +78,12 @@ def get_args() -> argparse.Namespace:
         type=int,
         default=1_000,
         help="Save a checkpoint every N steps",
+    )
+    parser.add_argument(
+        "--save_steps",
+        type=int,
+        default=None,
+        help="Alias for checkpoint_interval (overrides if set)",
     )
 
     # Weights & Biases (wandb) params
@@ -162,6 +171,8 @@ def maybe_init_wandb(args: argparse.Namespace):
 
 def main() -> None:
     args = get_args()
+    if args.save_steps is not None:
+        args.checkpoint_interval = args.save_steps
     device = torch.device(args.device)
 
     torch.manual_seed(args.seed)
@@ -172,37 +183,71 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    start_step = 0
+    if args.resume:
+        ckpt_path = latest_checkpoint_path(out_dir)
+        if ckpt_path is not None:
+            model, optimizer, start_step, ckpt_hparams = load_checkpoint_with_hyperparams(
+                ckpt_path,
+                model_cls=TransformerLM,
+                optimizer_cls=AdamW,
+                device=device,
+            )
+            for key in (
+                "vocab_size",
+                "context_length",
+                "num_layers",
+                "num_heads",
+                "d_model",
+                "d_ff",
+                "rope_theta",
+                "lr",
+                "weight_decay",
+                "beta1",
+                "beta2",
+            ):
+                if key in ckpt_hparams:
+                    setattr(args, key, ckpt_hparams[key])
+            print(f"[CKPT] Resumed from {ckpt_path} (iteration = {start_step})")
+        else:
+            print("[CKPT] No checkpoint found, starting fresh")
+            model = TransformerLM(
+                vocab_size=args.vocab_size,
+                context_length=args.context_length,
+                d_model=args.d_model,
+                num_layers=args.num_layers,
+                num_heads=args.num_heads,
+                d_ff=args.d_ff,
+                rope_theta=args.rope_theta,
+            ).to(device)
+            optimizer = AdamW(
+                model.parameters(),
+                lr=args.lr,
+                betas=(args.beta1, args.beta2),
+                weight_decay=args.weight_decay,
+            )
+    else:
+        model = TransformerLM(
+            vocab_size=args.vocab_size,
+            context_length=args.context_length,
+            d_model=args.d_model,
+            num_layers=args.num_layers,
+            num_heads=args.num_heads,
+            d_ff=args.d_ff,
+            rope_theta=args.rope_theta,
+        ).to(device)
+        optimizer = AdamW(
+            model.parameters(),
+            lr=args.lr,
+            betas=(args.beta1, args.beta2),
+            weight_decay=args.weight_decay,
+        )
+
     train_data = load_memmap(args.train_bin, args.dtype)
     val_data = load_memmap(args.val_bin, args.dtype)
     min_required = args.context_length + 1
     if train_data.shape[0] <= min_required or val_data.shape[0] <= min_required:
         raise ValueError("Datasets must be longer than context_length + 1")
-
-    model = TransformerLM(
-        vocab_size=args.vocab_size,
-        context_length=args.context_length,
-        d_model=args.d_model,
-        num_layers=args.num_layers,
-        num_heads=args.num_heads,
-        d_ff=args.d_ff,
-        rope_theta=args.rope_theta,
-    ).to(device)
-
-    optimizer = AdamW(
-        model.parameters(),
-        lr=args.lr,
-        betas=(args.beta1, args.beta2),
-        weight_decay=args.weight_decay,
-    )
-
-    start_step = 0
-    if args.resume:
-        ckpt_path = latest_checkpoint_path(out_dir)
-        if ckpt_path is not None:
-            start_step = load_checkpoint(ckpt_path, model, optimizer)
-            print(f"[CKPT] Resumed from {ckpt_path} (iteration = {start_step})")
-        else:
-            print("[CKPT] No checkpoint found, starting fresh")
 
     run = maybe_init_wandb(args)
     tokens_per_batch = args.batch_size * args.context_length
@@ -290,7 +335,13 @@ def main() -> None:
 
         if (step + 1) % args.checkpoint_interval == 0 or (step + 1) == args.max_steps:
             ckpt_path = out_dir / f"ckpt_step_{step+1:07d}.pt"
-            save_checkpoint(model, optimizer, step + 1, ckpt_path)
+            save_checkpoint(
+                model,
+                optimizer,
+                step + 1,
+                ckpt_path,
+                hyperparams=vars(args),
+            )
             print(f"[CKPT] Saved to {ckpt_path}")
 
     if run is not None:
